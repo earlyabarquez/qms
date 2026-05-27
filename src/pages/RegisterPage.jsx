@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { register as registerUser } from "../utils/auth";
 import {
-  ClipboardList, Mail, Lock, User, ArrowRight, Loader2,
+  Mail, Lock, User, ArrowRight, Loader2,
   GraduationCap, BookOpen,
 } from "lucide-react";
 
@@ -29,29 +29,42 @@ export default function RegisterPage() {
 
   return (
     <div style={styles.page}>
+      {/* Left panel — identical to login */}
       <div style={styles.left}>
         <div style={styles.leftContent}>
-          <div style={styles.logoMark}>
-            <ClipboardList size={28} color="#fff" strokeWidth={2.5} />
+          <div style={styles.logoBounce}>
+            <img
+              src="/src/assets/quizbee_logo.png"
+              alt="QuizBee logo"
+              style={styles.logoImg}
+            />
           </div>
-          <h2 style={styles.leftTitle}>Join QuizApp</h2>
+          <h2 style={styles.leftTitle}>
+            Quiz<span style={styles.bee}>Bee</span>
+          </h2>
           <p style={styles.leftSub}>
-            Get started as a teacher or student — create quizzes, take assessments, and track your progress.
+            <span style={styles.tagEmoji}>✨</span>
+            {" "}Bee curious.{" "}
+            <span style={styles.tagHighlight}>Bee smart.</span>
+            {" "}Bee unstoppable!{" "}
+            <span style={styles.tagEmoji}>🚀</span>
           </p>
           <div style={styles.dots}>
-            <span style={{ ...styles.dot, background: "#818cf8" }} />
-            <span style={{ ...styles.dot, background: "#a78bfa" }} />
-            <span style={{ ...styles.dot, background: "#c4b5fd" }} />
+            <span style={{ ...styles.dot, background: "#fbbf24" }} />
+            <span style={{ ...styles.dot, background: "#a78bfa", width: 10, height: 10 }} />
+            <span style={{ ...styles.dot, background: "#fbbf24" }} />
           </div>
         </div>
       </div>
 
+      {/* Right panel — register form */}
       <div style={styles.right}>
         <div style={styles.card}>
           <h1 style={styles.title}>Create your account</h1>
-          <p style={styles.subtitle}>Choose your role and get started</p>
+          <p style={styles.subtitle}>Join QuizBee as a teacher or student</p>
 
           <form onSubmit={handleSubmit(onSubmit)} style={styles.form} noValidate>
+
             {/* Role selector */}
             <div style={styles.field}>
               <label style={styles.label}>I am a…</label>
@@ -80,6 +93,7 @@ export default function RegisterPage() {
               </div>
             </div>
 
+            {/* Full name */}
             <div style={styles.field}>
               <label style={styles.label}>Full name</label>
               <div style={inputWrapStyle(!!errors.name)}>
@@ -92,6 +106,7 @@ export default function RegisterPage() {
               {errors.name && <span style={styles.error}>{errors.name.message}</span>}
             </div>
 
+            {/* Email */}
             <div style={styles.field}>
               <label style={styles.label}>Email address</label>
               <div style={inputWrapStyle(!!errors.email)}>
@@ -107,6 +122,7 @@ export default function RegisterPage() {
               {errors.email && <span style={styles.error}>{errors.email.message}</span>}
             </div>
 
+            {/* Password */}
             <div style={styles.field}>
               <label style={styles.label}>Password</label>
               <div style={inputWrapStyle(!!errors.password)}>
@@ -128,7 +144,7 @@ export default function RegisterPage() {
               {isSubmitting ? (
                 <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
               ) : (
-                <>Create account <ArrowRight size={16} strokeWidth={2.5} /></>
+                <>Let's go! <ArrowRight size={16} strokeWidth={2.5} /></>
               )}
             </button>
           </form>
@@ -139,6 +155,13 @@ export default function RegisterPage() {
           </p>
         </div>
       </div>
+
+      <style>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0px) rotate(-2deg); }
+          50%       { transform: translateY(-14px) rotate(2deg); }
+        }
+      `}</style>
     </div>
   );
 }
@@ -162,13 +185,14 @@ function inputWrapStyle(hasError) {
     padding: "0 14px", borderRadius: "10px",
     border: `1.5px solid ${hasError ? "#ef4444" : "#e5e7eb"}`,
     background: "#fafafa",
+    transition: "border-color 0.15s",
   };
 }
 
 function roleCardStyle(active) {
   return {
     flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
-    gap: "8px", padding: "18px 10px", borderRadius: "12px", cursor: "pointer",
+    gap: "8px", padding: "16px 10px", borderRadius: "12px", cursor: "pointer",
     border: `2px solid ${active ? "#6366f1" : "#e5e7eb"}`,
     background: active ? "#eef2ff" : "#fff",
     transition: "all 0.15s",
@@ -186,29 +210,41 @@ function roleIconStyle(active) {
 }
 
 const styles = {
-  page: { minHeight: "100vh", display: "flex", background: "#fff" },
+  page: {
+    minHeight: "100vh", display: "flex", background: "#fff",
+  },
   left: {
     flex: "0 0 45%", display: "flex", alignItems: "center", justifyContent: "center",
     background: "linear-gradient(145deg, #312e81, #4338ca, #6366f1)",
     padding: "3rem",
   },
-  leftContent: { maxWidth: "360px", textAlign: "center" },
-  logoMark: {
-    width: "56px", height: "56px", borderRadius: "16px",
-    background: "rgba(255,255,255,0.15)",
-    border: "1px solid rgba(255,255,255,0.2)",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    margin: "0 auto 20px", backdropFilter: "blur(8px)",
+  leftContent: {
+    maxWidth: "360px", textAlign: "center",
+  },
+  logoBounce: {
+    animation: "float 3s ease-in-out infinite",
+    display: "inline-block",
+    marginBottom: "24px",
+    filter: "drop-shadow(0 12px 24px rgba(0,0,0,0.3))",
+  },
+  logoImg: {
+    width: "200px", height: "200px", objectFit: "contain",
   },
   leftTitle: {
-    fontSize: "28px", fontWeight: "700", color: "#fff",
-    margin: "0 0 10px", letterSpacing: "-0.02em",
+    fontSize: "38px", fontWeight: "800", color: "#fff",
+    margin: "0 0 14px", letterSpacing: "-0.02em",
+  },
+  bee: {
+    color: "#fbbf24",
+    textShadow: "0 2px 12px rgba(251,191,36,0.5)",
   },
   leftSub: {
-    fontSize: "15px", color: "rgba(255,255,255,0.75)",
-    lineHeight: "1.6", margin: "0 0 28px",
+    fontSize: "17px", color: "rgba(255,255,255,0.9)",
+    lineHeight: "1.7", margin: "0 0 28px", fontWeight: "500",
   },
-  dots: { display: "flex", gap: "6px", justifyContent: "center" },
+  tagEmoji: { fontSize: "20px" },
+  tagHighlight: { color: "#fbbf24", fontWeight: "700" },
+  dots: { display: "flex", gap: "8px", justifyContent: "center", alignItems: "center" },
   dot: { width: "8px", height: "8px", borderRadius: "50%" },
   right: {
     flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
@@ -235,13 +271,18 @@ const styles = {
     fontSize: "13px", color: "#991b1b",
   },
   btn: {
-    width: "100%", padding: "12px", fontSize: "15px", fontWeight: "600",
+    width: "100%", padding: "12px", fontSize: "15px", fontWeight: "700",
     background: "linear-gradient(135deg, #4f46e5, #6366f1)",
     color: "#fff", border: "none", borderRadius: "10px",
     cursor: "pointer", marginTop: "6px",
     display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
     boxShadow: "0 2px 10px rgba(79,70,229,0.3)",
+    transition: "all 0.15s",
   },
-  footer: { textAlign: "center", fontSize: "14px", color: "#6b7280", marginTop: "2rem" },
-  link: { color: "#4f46e5", textDecoration: "none", fontWeight: "600" },
+  footer: {
+    textAlign: "center", fontSize: "14px", color: "#6b7280", marginTop: "2rem",
+  },
+  link: {
+    color: "#4f46e5", textDecoration: "none", fontWeight: "600",
+  },
 };

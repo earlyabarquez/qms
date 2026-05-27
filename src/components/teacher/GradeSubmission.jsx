@@ -1,37 +1,26 @@
 import { useEffect, useState } from "react";
 import {
   Check, X, ChevronDown, ChevronUp, AlignLeft,
-  List, MessageSquare, Loader2, Save,
+  MessageSquare, Loader2, Save,
 } from "lucide-react";
 import { getQuestions, getQuizSubmissions, gradeSubmission } from "../../utils/firestore";
 
-/**
- * GradeSubmission
- * Props:
- *   quizId      — the quiz being reviewed
- *   onClose     — called when teacher dismisses the panel
- *
- * Shows every student submission that has at least one situational question.
- * Teacher can mark each situational answer correct/incorrect and optionally leave a note.
- * On save, calls gradeSubmission(submissionId, gradedAnswers) in Firestore.
- */
 export default function GradeSubmission({ quizId, onClose }) {
   const [questions, setQuestions] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedSub, setExpandedSub] = useState(null);
-  const [grades, setGrades] = useState({}); // { [subId]: { [qIdx]: { correct: bool|null, note: string } } }
-  const [saving, setSaving] = useState(null); // subId being saved
+  const [grades, setGrades] = useState({});
+  const [saving, setSaving] = useState(null);
+  const [saved, setSaved] = useState({}); // track which subs were saved
 
   useEffect(() => {
     Promise.all([getQuestions(quizId), getQuizSubmissions(quizId)]).then(
       ([qs, subs]) => {
         setQuestions(qs);
-        // Only show submissions that have at least one situational question
         const hasSituational = qs.some((q) => q.type === "situational");
         setSubmissions(hasSituational ? subs : []);
 
-        // Pre-fill grades from existing gradedAnswers on submission
         const initial = {};
         subs.forEach((sub) => {
           initial[sub.id] = {};
@@ -58,10 +47,7 @@ export default function GradeSubmission({ quizId, onClose }) {
       ...prev,
       [subId]: {
         ...prev[subId],
-        [qIdx]: {
-          ...prev[subId]?.[qIdx],
-          [field]: value,
-        },
+        [qIdx]: { ...prev[subId]?.[qIdx], [field]: value },
       },
     }));
   };
@@ -70,6 +56,18 @@ export default function GradeSubmission({ quizId, onClose }) {
     setSaving(subId);
     await gradeSubmission(subId, grades[subId], questions);
     setSaving(null);
+    setSaved((prev) => ({ ...prev, [subId]: true }));
+
+    // If all submissions are graded, close after a short delay
+    const allGraded = submissions.every((sub) =>
+      sub.id === subId ? true : saved[sub.id]
+    );
+    if (allGraded) {
+      setTimeout(() => onClose(), 800);
+    } else {
+      // Close after saving this one regardless — go back to quiz detail
+      setTimeout(() => onClose(), 800);
+    }
   };
 
   const gradeComplete = (subId) => {
@@ -122,10 +120,10 @@ export default function GradeSubmission({ quizId, onClose }) {
             {submissions.map((sub) => {
               const isExpanded = expandedSub === sub.id;
               const done = gradeComplete(sub.id);
+              const wasSaved = saved[sub.id];
 
               return (
                 <div key={sub.id} style={styles.subCard}>
-                  {/* Student row */}
                   <button
                     style={styles.subHeader}
                     onClick={() => setExpandedSub(isExpanded ? null : sub.id)}
@@ -134,26 +132,19 @@ export default function GradeSubmission({ quizId, onClose }) {
                       {initials(sub.studentName)}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={styles.studentName}>
-                        {sub.studentName || "Unknown student"}
-                      </p>
+                      <p style={styles.studentName}>{sub.studentName || "Unknown student"}</p>
                       <p style={styles.studentEmail}>{sub.studentEmail || ""}</p>
                     </div>
-                    <span style={statusPill(done)}>
-                      {done ? (
-                        <><Check size={11} strokeWidth={3} /> Graded</>
-                      ) : (
-                        "Pending"
-                      )}
+                    <span style={statusPill(done, wasSaved)}>
+                      {wasSaved
+                        ? <><Check size={11} strokeWidth={3} /> Saved</>
+                        : done
+                        ? <><Check size={11} strokeWidth={3} /> Graded</>
+                        : "Pending"}
                     </span>
-                    {isExpanded ? (
-                      <ChevronUp size={16} color="#6b7280" />
-                    ) : (
-                      <ChevronDown size={16} color="#6b7280" />
-                    )}
+                    {isExpanded ? <ChevronUp size={16} color="#6b7280" /> : <ChevronDown size={16} color="#6b7280" />}
                   </button>
 
-                  {/* Expanded: situational answers */}
                   {isExpanded && (
                     <div style={styles.answersWrap}>
                       {questions.map((q, qIdx) => {
@@ -171,31 +162,25 @@ export default function GradeSubmission({ quizId, onClose }) {
                             <div style={styles.studentResponseBox}>
                               <p style={styles.responseLabel}>Student's answer</p>
                               <p style={styles.responseText}>
-                                {studentAnswer || (
-                                  <em style={{ color: "#9ca3af" }}>No answer provided</em>
-                                )}
+                                {studentAnswer || <em style={{ color: "#9ca3af" }}>No answer provided</em>}
                               </p>
                             </div>
 
-                            {/* Correct / Incorrect toggle */}
                             <div style={styles.gradeRow}>
                               <button
                                 style={gradeBtn(grade.correct === true)}
                                 onClick={() => setGrade(sub.id, qIdx, "correct", true)}
                               >
-                                <Check size={14} strokeWidth={3} />
-                                Correct
+                                <Check size={14} strokeWidth={3} /> Correct
                               </button>
                               <button
                                 style={gradeBtn(grade.correct === false, true)}
                                 onClick={() => setGrade(sub.id, qIdx, "correct", false)}
                               >
-                                <X size={14} strokeWidth={3} />
-                                Incorrect
+                                <X size={14} strokeWidth={3} /> Incorrect
                               </button>
                             </div>
 
-                            {/* Note */}
                             <div style={styles.noteWrap}>
                               <label style={styles.noteLabel}>
                                 <MessageSquare size={12} strokeWidth={2} />
@@ -205,9 +190,7 @@ export default function GradeSubmission({ quizId, onClose }) {
                                 rows={2}
                                 placeholder="e.g. Great critical thinking! You addressed the root cause…"
                                 value={grade.note}
-                                onChange={(e) =>
-                                  setGrade(sub.id, qIdx, "note", e.target.value)
-                                }
+                                onChange={(e) => setGrade(sub.id, qIdx, "note", e.target.value)}
                                 style={styles.noteTextarea}
                               />
                             </div>
@@ -215,15 +198,16 @@ export default function GradeSubmission({ quizId, onClose }) {
                         );
                       })}
 
-                      {/* Save button */}
                       <div style={styles.saveRow}>
                         <button
-                          style={saveBtn(gradeComplete(sub.id))}
+                          style={saveBtnStyle(wasSaved)}
                           onClick={() => handleSave(sub.id)}
-                          disabled={saving === sub.id}
+                          disabled={saving === sub.id || wasSaved}
                         >
                           {saving === sub.id ? (
                             <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+                          ) : wasSaved ? (
+                            <><Check size={14} strokeWidth={3} /> Saved — closing…</>
                           ) : (
                             <><Save size={14} strokeWidth={2.5} /> Save grades</>
                           )}
@@ -256,14 +240,14 @@ function avatarStyle(done) {
   };
 }
 
-function statusPill(done) {
+function statusPill(done, saved) {
+  const bg = saved ? "#ecfdf5" : done ? "#ecfdf5" : "#f9fafb";
+  const color = saved ? "#059669" : done ? "#059669" : "#d97706";
+  const border = saved ? "#a7f3d0" : done ? "#a7f3d0" : "#fde68a";
   return {
     display: "inline-flex", alignItems: "center", gap: "4px",
     fontSize: "12px", fontWeight: "600", padding: "3px 10px",
-    borderRadius: "20px",
-    background: done ? "#ecfdf5" : "#f9fafb",
-    color: done ? "#059669" : "#d97706",
-    border: `1px solid ${done ? "#a7f3d0" : "#fde68a"}`,
+    borderRadius: "20px", background: bg, color, border: `1px solid ${border}`,
   };
 }
 
@@ -282,123 +266,58 @@ function gradeBtn(active, isWrong = false) {
   };
 }
 
-function saveBtn(complete) {
+function saveBtnStyle(saved) {
   return {
     display: "flex", alignItems: "center", gap: "6px",
     padding: "9px 20px", fontSize: "13px", fontWeight: "600",
-    borderRadius: "8px", cursor: "pointer", border: "none",
-    background: complete
-      ? "linear-gradient(135deg, #4f46e5, #6366f1)"
+    borderRadius: "8px", cursor: saved ? "default" : "pointer", border: "none",
+    background: saved
+      ? "linear-gradient(135deg, #059669, #10b981)"
       : "linear-gradient(135deg, #4f46e5, #6366f1)",
     color: "#fff",
     boxShadow: "0 2px 8px rgba(79,70,229,0.25)",
-    opacity: 1,
+    transition: "background 0.3s",
   };
 }
 
 const styles = {
   overlay: {
-    position: "fixed", inset: 0,
-    background: "rgba(0,0,0,0.35)",
+    position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)",
     display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
-    zIndex: 100,
-    padding: "72px 24px 24px 0",
+    zIndex: 100, padding: "72px 24px 24px 0",
   },
   panel: {
-    background: "#fff", border: "1px solid #e8eaef",
-    borderRadius: "18px",
-    width: "100%", maxWidth: "560px",
-    maxHeight: "calc(100vh - 96px)",
-    overflowY: "auto",
-    boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+    background: "#fff", border: "1px solid #e8eaef", borderRadius: "18px",
+    width: "100%", maxWidth: "560px", maxHeight: "calc(100vh - 96px)",
+    overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
     display: "flex", flexDirection: "column",
   },
   header: {
     display: "flex", justifyContent: "space-between", alignItems: "flex-start",
-    padding: "1.5rem 1.5rem 1rem",
-    borderBottom: "1px solid #f0f0f4",
+    padding: "1.5rem 1.5rem 1rem", borderBottom: "1px solid #f0f0f4",
   },
-  panelTitle: {
-    fontSize: "16px", fontWeight: "700", color: "#1e1b4b", margin: "0 0 4px",
-  },
+  panelTitle: { fontSize: "16px", fontWeight: "700", color: "#1e1b4b", margin: "0 0 4px" },
   panelSub: { fontSize: "13px", color: "#9ca3af", margin: 0 },
-  closeBtn: {
-    background: "none", border: "none", cursor: "pointer",
-    color: "#6b7280", padding: "4px",
-    borderRadius: "6px",
-  },
+  closeBtn: { background: "none", border: "none", cursor: "pointer", color: "#6b7280", padding: "4px", borderRadius: "6px" },
   center: { display: "flex", justifyContent: "center", padding: "3rem" },
-  emptyState: {
-    display: "flex", flexDirection: "column", alignItems: "center",
-    gap: "8px", padding: "3rem 2rem", textAlign: "center",
-  },
+  emptyState: { display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", padding: "3rem 2rem", textAlign: "center" },
   emptyTitle: { fontSize: "14px", fontWeight: "600", color: "#1e1b4b", margin: 0 },
   emptySub: { fontSize: "13px", color: "#9ca3af", margin: 0 },
-  list: {
-    display: "flex", flexDirection: "column", gap: "1px",
-    padding: "12px",
-  },
-  subCard: {
-    border: "1px solid #e8eaef", borderRadius: "12px",
-    overflow: "hidden", marginBottom: "8px",
-  },
-  subHeader: {
-    width: "100%", display: "flex", alignItems: "center", gap: "12px",
-    padding: "14px 16px", background: "#fafafa",
-    border: "none", cursor: "pointer", textAlign: "left",
-  },
-  studentName: {
-    fontSize: "14px", fontWeight: "600", color: "#1e1b4b", margin: 0,
-  },
-  studentEmail: {
-    fontSize: "12px", color: "#9ca3af", margin: 0,
-    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-  },
-  answersWrap: {
-    padding: "16px",
-    display: "flex", flexDirection: "column", gap: "20px",
-    background: "#fff",
-    borderTop: "1px solid #f0f0f4",
-  },
-  answerBlock: {
-    display: "flex", flexDirection: "column", gap: "10px",
-    padding: "14px",
-    background: "#fafafa",
-    borderRadius: "10px",
-    border: "1px solid #e8eaef",
-  },
-  questionRow: {
-    display: "flex", gap: "8px", alignItems: "flex-start",
-  },
-  qText: {
-    fontSize: "14px", fontWeight: "600", color: "#1e1b4b",
-    margin: 0, lineHeight: "1.4",
-  },
-  studentResponseBox: {
-    background: "#fff", border: "1px solid #e5e7eb",
-    borderRadius: "8px", padding: "10px 12px",
-  },
-  responseLabel: {
-    fontSize: "11px", fontWeight: "600", color: "#9ca3af",
-    margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.05em",
-  },
-  responseText: {
-    fontSize: "14px", color: "#374151", margin: 0, lineHeight: "1.6",
-  },
+  list: { display: "flex", flexDirection: "column", gap: "1px", padding: "12px" },
+  subCard: { border: "1px solid #e8eaef", borderRadius: "12px", overflow: "hidden", marginBottom: "8px" },
+  subHeader: { width: "100%", display: "flex", alignItems: "center", gap: "12px", padding: "14px 16px", background: "#fafafa", border: "none", cursor: "pointer", textAlign: "left" },
+  studentName: { fontSize: "14px", fontWeight: "600", color: "#1e1b4b", margin: 0 },
+  studentEmail: { fontSize: "12px", color: "#9ca3af", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  answersWrap: { padding: "16px", display: "flex", flexDirection: "column", gap: "20px", background: "#fff", borderTop: "1px solid #f0f0f4" },
+  answerBlock: { display: "flex", flexDirection: "column", gap: "10px", padding: "14px", background: "#fafafa", borderRadius: "10px", border: "1px solid #e8eaef" },
+  questionRow: { display: "flex", gap: "8px", alignItems: "flex-start" },
+  qText: { fontSize: "14px", fontWeight: "600", color: "#1e1b4b", margin: 0, lineHeight: "1.4" },
+  studentResponseBox: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px 12px" },
+  responseLabel: { fontSize: "11px", fontWeight: "600", color: "#9ca3af", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.05em" },
+  responseText: { fontSize: "14px", color: "#374151", margin: 0, lineHeight: "1.6" },
   gradeRow: { display: "flex", gap: "8px" },
   noteWrap: { display: "flex", flexDirection: "column", gap: "6px" },
-  noteLabel: {
-    display: "flex", alignItems: "center", gap: "5px",
-    fontSize: "12px", fontWeight: "600", color: "#6b7280",
-  },
-  noteTextarea: {
-    width: "100%", padding: "10px 12px", fontSize: "13px",
-    border: "1.5px solid #e5e7eb", borderRadius: "8px",
-    outline: "none", resize: "vertical", fontFamily: "inherit",
-    boxSizing: "border-box", background: "#fff", lineHeight: "1.5",
-  },
-  saveRow: {
-    display: "flex", justifyContent: "flex-end",
-    paddingTop: "4px",
-  },
+  noteLabel: { display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", fontWeight: "600", color: "#6b7280" },
+  noteTextarea: { width: "100%", padding: "10px 12px", fontSize: "13px", border: "1.5px solid #e5e7eb", borderRadius: "8px", outline: "none", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", background: "#fff", lineHeight: "1.5" },
+  saveRow: { display: "flex", justifyContent: "flex-end", paddingTop: "4px" },
 };

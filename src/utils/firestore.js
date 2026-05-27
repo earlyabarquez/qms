@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 
+// ─── Quizzes ───────────────────────────────────────────────────────────────
 
 export async function createQuiz(teacherId, title) {
   const ref = await addDoc(collection(db, "quizzes"), {
@@ -40,13 +41,15 @@ export async function getPublishedQuizzes() {
 
 // ─── Questions ────────────────────────────────────────────────────────────
 
-export async function addQuestion(quizId, { questionText, options, correctAnswer }) {
-  const ref = await addDoc(collection(db, "questions"), {
-    quizId,
-    questionText,
-    options,
-    correctAnswer,
-  });
+export async function addQuestion(quizId, { questionText, options, correctAnswer, type = "mc" }) {
+  const payload = { quizId, questionText, type };
+
+  if (type === "mc") {
+    payload.options = options;
+    payload.correctAnswer = correctAnswer;
+  }
+
+  const ref = await addDoc(collection(db, "questions"), payload);
   return ref.id;
 }
 
@@ -59,20 +62,28 @@ export async function getQuestions(quizId) {
 // ─── Submissions ──────────────────────────────────────────────────────────
 
 export async function submitQuiz(studentId, quizId, answers, questions) {
-  const score = questions.reduce((acc, q, i) => {
-    return acc + (answers[i] === q.correctAnswer ? 1 : 0);
-  }, 0);
+  let mcScore = 0;
+
+  const gradedAnswers = questions.map((q, i) => {
+    if (q.type === "situational") {
+      return { type: "situational", correct: null, note: "" };
+    }
+    const isCorrect = answers[i] === q.correctAnswer;
+    if (isCorrect) mcScore += 1;
+    return { type: "mc", correct: isCorrect };
+  });
 
   const ref = await addDoc(collection(db, "submissions"), {
     studentId,
     quizId,
     answers,
-    score,
+    gradedAnswers,
+    score: mcScore,
     total: questions.length,
     submittedAt: serverTimestamp(),
   });
 
-  return { submissionId: ref.id, score, total: questions.length };
+  return { submissionId: ref.id, score: mcScore, total: questions.length };
 }
 
 export async function getSubmission(studentId, quizId) {
@@ -117,9 +128,39 @@ export async function getQuizSubmissions(quizId) {
       score: data.score,
       total: data.total,
       answers: data.answers || [],
+      gradedAnswers: data.gradedAnswers || [],
       submittedAt: data.submittedAt?.toDate?.() ?? null,
     });
   }
 
   return submissions;
+}
+
+// ─── Grading ──────────────────────────────────────────────────────────────
+
+export async function gradeSubmission(submissionId, teacherGrades, questions) {
+  const subRef = doc(db, "submissions", submissionId);
+  const snap = await getDoc(subRef);
+  if (!snap.exists()) return;
+
+  const existing = snap.data();
+
+  const updatedGradedAnswers = (existing.gradedAnswers || []).map((g, idx) => {
+    if (questions[idx]?.type === "situational" && teacherGrades[idx] !== undefined) {
+      return {
+        ...g,
+        correct: teacherGrades[idx].correct,
+        note: teacherGrades[idx].note || "",
+      };
+    }
+    return g;
+  });
+
+  const newScore = updatedGradedAnswers.filter((g) => g.correct === true).length;
+
+  await updateDoc(subRef, {
+    gradedAnswers: updatedGradedAnswers,
+    score: newScore,
+    gradedAt: serverTimestamp(),
+  });
 }

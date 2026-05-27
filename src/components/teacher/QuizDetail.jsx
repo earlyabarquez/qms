@@ -7,7 +7,7 @@ import QuestionForm from "./QuestionForm";
 import StudentScoresPanel from "./StudentScoresPanel";
 import {
   ArrowLeft, Eye, EyeOff, Check, Loader2, FileText, HelpCircle,
-  Plus, Users,
+  Plus, Users, AlignLeft,
 } from "lucide-react";
 
 const LETTERS = ["A", "B", "C", "D"];
@@ -18,7 +18,7 @@ export default function QuizDetail() {
   const [quiz, setQuiz] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("questions"); // "questions" | "scores"
+  const [activeTab, setActiveTab] = useState("questions");
 
   useEffect(() => {
     async function load() {
@@ -114,25 +114,43 @@ export default function QuizDetail() {
                   <div style={styles.qHeader}>
                     <span style={styles.qNum}>Q{i + 1}</span>
                     <p style={styles.qText}>{q.questionText}</p>
+                    {q.type === "situational" && (
+                      <span style={styles.typePill}>
+                        <AlignLeft size={10} strokeWidth={2} />
+                        Situational
+                      </span>
+                    )}
                   </div>
-                  <div style={styles.options}>
-                    {q.options.map((opt, idx) => {
-                      const isCorrect = idx === q.correctAnswer;
-                      return (
-                        <div key={idx} style={optionStyle(isCorrect)}>
-                          <span style={optLetterStyle(isCorrect)}>
-                            {isCorrect ? <Check size={11} strokeWidth={3} /> : LETTERS[idx]}
-                          </span>
-                          <span style={styles.optText}>{opt}</span>
-                          {isCorrect && (
-                            <span style={styles.correct}>
-                              <Check size={11} strokeWidth={2.5} /> Correct
+
+                  {/* MC: show options */}
+                  {q.type !== "situational" && q.options && (
+                    <div style={styles.options}>
+                      {q.options.map((opt, idx) => {
+                        const isCorrect = idx === q.correctAnswer;
+                        return (
+                          <div key={idx} style={optionStyle(isCorrect)}>
+                            <span style={optLetterStyle(isCorrect)}>
+                              {isCorrect ? <Check size={11} strokeWidth={3} /> : LETTERS[idx]}
                             </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                            <span style={styles.optText}>{opt}</span>
+                            {isCorrect && (
+                              <span style={styles.correct}>
+                                <Check size={11} strokeWidth={2.5} /> Correct
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Situational: show placeholder */}
+                  {q.type === "situational" && (
+                    <div style={styles.situationalPlaceholder}>
+                      <AlignLeft size={13} color="#6366f1" strokeWidth={2} />
+                      Students will type a free-text response — graded manually by you
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -141,7 +159,6 @@ export default function QuizDetail() {
 
         {/* Right — tabbed sidebar */}
         <div style={styles.right}>
-          {/* Tab switcher */}
           <div style={styles.tabBar}>
             <button
               style={tabStyle(activeTab === "questions")}
@@ -159,7 +176,6 @@ export default function QuizDetail() {
             </button>
           </div>
 
-          {/* Tab content */}
           {activeTab === "questions" ? (
             <QuestionForm quizId={quizId} onAdded={handleQuestionAdded} />
           ) : (
@@ -282,17 +298,29 @@ const styles = {
     display: "flex", flexDirection: "column", gap: "12px",
     boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
   },
-  qHeader: { display: "flex", gap: "10px", alignItems: "flex-start" },
+  qHeader: { display: "flex", gap: "10px", alignItems: "flex-start", flexWrap: "wrap" },
   qNum: {
     background: "#eef2ff", color: "#4f46e5", fontSize: "12px",
     fontWeight: "700", padding: "3px 10px", borderRadius: "6px", flexShrink: 0,
   },
-  qText: { fontSize: "15px", fontWeight: "500", color: "#1e1b4b", margin: 0 },
+  qText: { fontSize: "15px", fontWeight: "500", color: "#1e1b4b", margin: 0, flex: 1 },
+  typePill: {
+    display: "inline-flex", alignItems: "center", gap: "4px",
+    fontSize: "11px", fontWeight: "600", color: "#4f46e5",
+    background: "#eef2ff", border: "1px solid #c7d2fe",
+    borderRadius: "20px", padding: "2px 8px", flexShrink: 0,
+  },
   options: { display: "flex", flexDirection: "column", gap: "6px" },
   optText: { fontSize: "14px", color: "#374151", flex: 1 },
   correct: {
     display: "flex", alignItems: "center", gap: "4px",
     fontSize: "12px", fontWeight: "600", color: "#059669",
+  },
+  situationalPlaceholder: {
+    display: "flex", alignItems: "center", gap: "8px",
+    padding: "10px 14px", borderRadius: "8px",
+    background: "#eef2ff", border: "1px solid #c7d2fe",
+    fontSize: "13px", color: "#4f46e5", fontWeight: "500",
   },
   emptyCard: {
     display: "flex", flexDirection: "column", alignItems: "center", gap: "10px",
