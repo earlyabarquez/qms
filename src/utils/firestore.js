@@ -3,6 +3,7 @@ import {
   doc,
   addDoc,
   updateDoc,
+  deleteDoc,
   getDocs,
   getDoc,
   query,
@@ -11,16 +12,30 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+/** Generate a 6-char quiz code (no ambiguous chars: 0/O/1/I/L) */
+function generateQuizCode() {
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
 // ─── Quizzes ───────────────────────────────────────────────────────────────
 
 export async function createQuiz(teacherId, title) {
+  const quizCode = generateQuizCode();
   const ref = await addDoc(collection(db, "quizzes"), {
     title,
     teacherId,
+    quizCode,
     isPublished: false,
     createdAt: serverTimestamp(),
   });
-  return ref.id;
+  return { id: ref.id, quizCode };
 }
 
 export async function setQuizPublished(quizId, isPublished) {
@@ -39,10 +54,38 @@ export async function getPublishedQuizzes() {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
+export async function getQuizByCode(code) {
+  const q = query(
+    collection(db, "quizzes"),
+    where("quizCode", "==", code.toUpperCase().trim())
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  return { id: d.id, ...d.data() };
+}
+
+export async function deleteQuiz(quizId) {
+  // Delete all questions for this quiz
+  const qSnap = await getDocs(
+    query(collection(db, "questions"), where("quizId", "==", quizId))
+  );
+  for (const d of qSnap.docs) await deleteDoc(d.ref);
+
+  // Delete all submissions for this quiz
+  const sSnap = await getDocs(
+    query(collection(db, "submissions"), where("quizId", "==", quizId))
+  );
+  for (const d of sSnap.docs) await deleteDoc(d.ref);
+
+  // Delete the quiz itself
+  await deleteDoc(doc(db, "quizzes", quizId));
+}
+
 // ─── Questions ────────────────────────────────────────────────────────────
 
-export async function addQuestion(quizId, { questionText, options, correctAnswer, type = "mc" }) {
-  const payload = { quizId, questionText, type };
+export async function addQuestion(quizId, { questionText, options, correctAnswer, type = "mc", imageURL = "" }) {
+  const payload = { quizId, questionText, type, imageURL };
 
   if (type === "mc") {
     payload.options = options;
@@ -57,6 +100,10 @@ export async function getQuestions(quizId) {
   const q = query(collection(db, "questions"), where("quizId", "==", quizId));
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+export async function deleteQuestion(questionId) {
+  await deleteDoc(doc(db, "questions", questionId));
 }
 
 // ─── Submissions ──────────────────────────────────────────────────────────

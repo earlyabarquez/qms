@@ -79,6 +79,7 @@ function QuizList() {
                 <div style={styles.cardIcon}>
                   <FileText size={20} color="#6366f1" strokeWidth={2} />
                 </div>
+                
                 <div style={{ flex: 1 }}>
                   <h2 style={styles.quizTitle}>{quiz.title}</h2>
                   <span style={statusBadge(quiz.isPublished)}>

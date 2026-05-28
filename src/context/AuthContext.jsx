@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
@@ -10,12 +10,16 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const fetchProfile = useCallback(async (uid) => {
+    const snap = await getDoc(doc(db, "users", uid));
+    setProfile(snap.exists() ? snap.data() : null);
+  }, []);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
-        const snap = await getDoc(doc(db, "users", firebaseUser.uid));
-        setProfile(snap.exists() ? snap.data() : null);
+        await fetchProfile(firebaseUser.uid);
       } else {
         setUser(null);
         setProfile(null);
@@ -23,13 +27,19 @@ export function AuthProvider({ children }) {
       setLoading(false);
     });
     return unsubscribe;
-  }, []);
+  }, [fetchProfile]);
+
+  /** Re-fetch the Firestore profile (call after photo/name updates). */
+  const refreshProfile = useCallback(async () => {
+    if (user) await fetchProfile(user.uid);
+  }, [user, fetchProfile]);
 
   const value = {
     user,
     profile,
     role: profile?.role ?? null,
     loading,
+    refreshProfile,
   };
 
   return (
