@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../firebase";
-import { getQuestions, setQuizPublished } from "../../utils/firestore";
+import { getQuestions, setQuizPublished, deleteQuestion } from "../../utils/firestore";
 import QuestionForm from "./QuestionForm";
 import StudentScoresPanel from "./StudentScoresPanel";
 import {
   ArrowLeft, Eye, EyeOff, Check, Loader2, FileText, HelpCircle,
-  Plus, Users, AlignLeft,
+  Plus, Users, AlignLeft, Trash2, Copy, Image as ImageIcon,
 } from "lucide-react";
 
 const LETTERS = ["A", "B", "C", "D"];
@@ -19,6 +19,8 @@ export default function QuizDetail() {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("questions");
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [deletingQId, setDeletingQId] = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -42,6 +44,25 @@ export default function QuizDetail() {
     setQuiz((prev) => ({ ...prev, isPublished: !prev.isPublished }));
   };
 
+  const handleCopyCode = async () => {
+    if (!quiz?.quizCode) return;
+    await navigator.clipboard.writeText(quiz.quizCode);
+    setCodeCopied(true);
+    setTimeout(() => setCodeCopied(false), 2000);
+  };
+
+  const handleDeleteQuestion = async (qId) => {
+    setDeletingQId(qId);
+    try {
+      await deleteQuestion(qId);
+      setQuestions((prev) => prev.filter((q) => q.id !== qId));
+    } catch (err) {
+      console.error("Delete question failed:", err);
+    } finally {
+      setDeletingQId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div style={styles.page}>
@@ -63,8 +84,7 @@ export default function QuizDetail() {
   return (
     <div style={styles.page}>
       <button style={styles.backBtn} onClick={() => navigate("/teacher")}>
-        <ArrowLeft size={15} strokeWidth={2} />
-        Back to quizzes
+        <ArrowLeft size={15} strokeWidth={2} /> Back to quizzes
       </button>
 
       {/* Quiz header */}
@@ -75,13 +95,21 @@ export default function QuizDetail() {
           </div>
           <div>
             <h1 style={styles.title}>{quiz.title}</h1>
-            <span style={statusBadge(quiz.isPublished)}>
-              {quiz.isPublished ? (
-                <><Eye size={11} strokeWidth={2.5} /> Published</>
-              ) : (
-                <><EyeOff size={11} strokeWidth={2.5} /> Draft</>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "6px", flexWrap: "wrap" }}>
+              <span style={statusBadge(quiz.isPublished)}>
+                {quiz.isPublished ? (
+                  <><Eye size={11} strokeWidth={2.5} /> Published</>
+                ) : (
+                  <><EyeOff size={11} strokeWidth={2.5} /> Draft</>
+                )}
+              </span>
+              {quiz.quizCode && (
+                <button onClick={handleCopyCode} style={styles.codeBadge} title="Click to copy quiz code">
+                  {codeCopied ? <Check size={11} strokeWidth={2.5} /> : <Copy size={11} strokeWidth={2} />}
+                  {" "}Code: {quiz.quizCode}
+                </button>
               )}
-            </span>
+            </div>
           </div>
         </div>
         <button style={publishBtnStyle(quiz.isPublished)} onClick={handleTogglePublish}>
@@ -114,13 +142,32 @@ export default function QuizDetail() {
                   <div style={styles.qHeader}>
                     <span style={styles.qNum}>Q{i + 1}</span>
                     <p style={styles.qText}>{q.questionText}</p>
-                    {q.type === "situational" && (
-                      <span style={styles.typePill}>
-                        <AlignLeft size={10} strokeWidth={2} />
-                        Situational
-                      </span>
-                    )}
+                    <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                      {q.type === "situational" && (
+                        <span style={styles.typePill}>
+                          <AlignLeft size={10} strokeWidth={2} /> Situational
+                        </span>
+                      )}
+                      <button
+                        onClick={() => handleDeleteQuestion(q.id)}
+                        disabled={deletingQId === q.id}
+                        style={styles.qDeleteBtn}
+                        title="Delete question"
+                      >
+                        {deletingQId === q.id
+                          ? <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} />
+                          : <Trash2 size={12} strokeWidth={2} />
+                        }
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Question image */}
+                  {q.imageURL && (
+                    <div style={styles.qImageWrap}>
+                      <img src={q.imageURL} alt="Question" style={styles.qImage} />
+                    </div>
+                  )}
 
                   {/* MC: show options */}
                   {q.type !== "situational" && q.options && (
@@ -164,15 +211,13 @@ export default function QuizDetail() {
               style={tabStyle(activeTab === "questions")}
               onClick={() => setActiveTab("questions")}
             >
-              <Plus size={14} strokeWidth={2.5} />
-              Add Question
+              <Plus size={14} strokeWidth={2.5} /> Add Question
             </button>
             <button
               style={tabStyle(activeTab === "scores")}
               onClick={() => setActiveTab("scores")}
             >
-              <Users size={14} strokeWidth={2.5} />
-              Submissions
+              <Users size={14} strokeWidth={2.5} /> Submissions
             </button>
           </div>
 
@@ -187,12 +232,13 @@ export default function QuizDetail() {
   );
 }
 
+// ─── Style helpers ────────────────────────────────────────────────────────
+
 function tabStyle(active) {
   return {
     flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
     gap: "6px", padding: "10px 8px", fontSize: "13px", fontWeight: "600",
-    borderRadius: "10px", cursor: "pointer",
-    border: "none",
+    borderRadius: "10px", cursor: "pointer", border: "none",
     background: active ? "#eef2ff" : "transparent",
     color: active ? "#4f46e5" : "#9ca3af",
     transition: "all 0.15s",
@@ -203,7 +249,7 @@ function statusBadge(published) {
   return {
     display: "inline-flex", alignItems: "center", gap: "4px",
     fontSize: "12px", fontWeight: "600",
-    padding: "3px 10px", borderRadius: "20px", marginTop: "6px",
+    padding: "3px 10px", borderRadius: "20px",
     background: published ? "#ecfdf5" : "#f9fafb",
     color: published ? "#059669" : "#6b7280",
     border: `1px solid ${published ? "#a7f3d0" : "#e5e7eb"}`,
@@ -265,11 +311,17 @@ const styles = {
     fontSize: "22px", fontWeight: "700", color: "#1e1b4b",
     margin: 0, letterSpacing: "-0.02em",
   },
+  codeBadge: {
+    display: "inline-flex", alignItems: "center", gap: "4px",
+    fontSize: "12px", fontWeight: "700", letterSpacing: "0.06em",
+    padding: "3px 10px", borderRadius: "6px",
+    background: "#f5f3ff", color: "#6366f1",
+    border: "1px solid #c7d2fe", cursor: "pointer",
+    fontFamily: "monospace",
+  },
   layout: {
-    display: "grid",
-    gridTemplateColumns: "1fr 420px",
-    gap: "28px",
-    alignItems: "flex-start",
+    display: "grid", gridTemplateColumns: "1fr 420px",
+    gap: "28px", alignItems: "flex-start",
   },
   left: {},
   right: {
@@ -278,8 +330,7 @@ const styles = {
   },
   tabBar: {
     display: "flex", gap: "4px",
-    background: "#f3f4f6", borderRadius: "12px",
-    padding: "4px",
+    background: "#f3f4f6", borderRadius: "12px", padding: "4px",
   },
   sectionTitle: {
     display: "flex", alignItems: "center", gap: "8px",
@@ -309,6 +360,20 @@ const styles = {
     fontSize: "11px", fontWeight: "600", color: "#4f46e5",
     background: "#eef2ff", border: "1px solid #c7d2fe",
     borderRadius: "20px", padding: "2px 8px", flexShrink: 0,
+  },
+  qDeleteBtn: {
+    width: "28px", height: "28px", borderRadius: "6px",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    background: "none", border: "1px solid #fecaca",
+    color: "#dc2626", cursor: "pointer", flexShrink: 0,
+  },
+  qImageWrap: {
+    borderRadius: "10px", overflow: "hidden",
+    border: "1px solid #e5e7eb", maxWidth: "100%",
+  },
+  qImage: {
+    width: "100%", maxHeight: "240px", objectFit: "contain",
+    display: "block", background: "#fafafa",
   },
   options: { display: "flex", flexDirection: "column", gap: "6px" },
   optText: { fontSize: "14px", color: "#374151", flex: 1 },

@@ -13,7 +13,7 @@ export default function CreateQuiz() {
   } = useForm();
 
   const onSubmit = async ({ title }) => {
-    const quizId = await createQuiz(user.uid, title.trim());
+    const { id: quizId } = await createQuiz(user.uid, title.trim());
     navigate(`/teacher/quiz/${quizId}`);
   };
 
@@ -31,6 +31,7 @@ export default function CreateQuiz() {
         <h1 style={styles.title}>Create a new quiz</h1>
         <p style={styles.sub}>
           Give your quiz a title, then add questions on the next screen.
+          A shareable quiz code will be generated automatically.
         </p>
 
         <form onSubmit={handleSubmit(onSubmit)} style={styles.form} noValidate>
@@ -117,7 +118,6 @@ const styles = {
     padding: "10px 22px", fontSize: "14px", fontWeight: "600",
     background: "linear-gradient(135deg, #4f46e5, #6366f1)",
     color: "#fff", border: "none", borderRadius: "10px",
-    cursor: "pointer",
-    boxShadow: "0 2px 8px rgba(79,70,229,0.25)",
+    cursor: "pointer", boxShadow: "0 2px 8px rgba(79,70,229,0.25)",
   },
 };
