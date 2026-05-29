@@ -1,22 +1,25 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useForm } from "react-hook-form";
-import { addQuestion } from "../../utils/firestore";
+import { addQuestion, updateQuestion } from "../../utils/firestore";
 import { uploadImage, canUpload, getRemainingUploads } from "../../utils/cloudinary";
 import {
-  Plus, Check, Loader2, AlignLeft, List, Image as ImageIcon,
-  X, ChevronDown, ToggleLeft, Type,
+  Plus, Check, Loader2, AlignLeft, Image as ImageIcon,
+  X, ChevronDown, Pencil,
 } from "lucide-react";
 
 const LETTERS = ["A", "B", "C", "D"];
 
 const QUESTION_TYPES = [
-  { value: "mc",            label: "Multiple choice",  icon: "▤" },
-  { value: "true_false",    label: "True or False",    icon: "⊙" },
-  { value: "identification",label: "Identification",   icon: "T" },
-  { value: "situational",   label: "Situational",      icon: "¶" },
+  { value: "mc",             label: "Multiple choice",  icon: "▤" },
+  { value: "true_false",     label: "True or False",    icon: "⊙" },
+  { value: "identification", label: "Identification",   icon: "T" },
+  { value: "situational",    label: "Situational",      icon: "¶" },
 ];
 
-export default function QuestionForm({ quizId, onAdded }) {
+// editingQuestion: the full question object to edit, or null for add mode
+export default function QuestionForm({ quizId, onAdded, onUpdated, editingQuestion, onCancelEdit }) {
+  const isEditMode = !!editingQuestion;
+
   const [questionType, setQuestionType] = useState("mc");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [imageFile, setImageFile] = useState(null);
@@ -35,6 +38,40 @@ export default function QuestionForm({ quizId, onAdded }) {
   const tfAnswer = watch("tfAnswer");
 
   const selectedType = QUESTION_TYPES.find((t) => t.value === questionType);
+
+  // Pre-fill form when entering edit mode
+  useEffect(() => {
+    if (!editingQuestion) {
+      reset({ correctAnswer: 0, tfAnswer: 0, questionText: "", optA: "", optB: "", optC: "", optD: "", answerKey: "" });
+      setQuestionType("mc");
+      setImagePreview("");
+      setImageFile(null);
+      return;
+    }
+
+    const q = editingQuestion;
+    setQuestionType(q.type);
+    setImagePreview(q.imageURL || "");
+    setImageFile(null);
+
+    const defaults = { questionText: q.questionText || "" };
+
+    if (q.type === "mc") {
+      defaults.optA = q.options?.[0] || "";
+      defaults.optB = q.options?.[1] || "";
+      defaults.optC = q.options?.[2] || "";
+      defaults.optD = q.options?.[3] || "";
+      defaults.correctAnswer = q.correctAnswer ?? 0;
+    }
+    if (q.type === "true_false") {
+      defaults.tfAnswer = q.correctAnswer ?? 0;
+    }
+    if (q.type === "identification") {
+      defaults.answerKey = q.answerKey || "";
+    }
+
+    reset(defaults);
+  }, [editingQuestion]);
 
   const handleImageSelect = (e) => {
     const file = e.target.files?.[0];
@@ -55,7 +92,7 @@ export default function QuestionForm({ quizId, onAdded }) {
 
   const onSubmit = async (data) => {
     setErrorMsg("");
-    let imageURL = "";
+    let imageURL = isEditMode ? (editingQuestion.imageURL || "") : "";
 
     if (imageFile) {
       if (!canUpload()) { setErrorMsg("Daily upload limit reached. Try again tomorrow."); return; }
@@ -69,6 +106,9 @@ export default function QuestionForm({ quizId, onAdded }) {
       }
       setUploadingImage(false);
     }
+
+    // If image was cleared in edit mode
+    if (!imagePreview && !imageFile) imageURL = "";
 
     let payload;
     if (questionType === "mc") {
@@ -84,7 +124,7 @@ export default function QuestionForm({ quizId, onAdded }) {
         type: "true_false",
         questionText: data.questionText.trim(),
         options: ["True", "False"],
-        correctAnswer: Number(data.tfAnswer), // 0 = True, 1 = False
+        correctAnswer: Number(data.tfAnswer),
         imageURL,
       };
     } else if (questionType === "identification") {
@@ -102,20 +142,36 @@ export default function QuestionForm({ quizId, onAdded }) {
       };
     }
 
-    const id = await addQuestion(quizId, payload);
-    onAdded({ id, quizId, ...payload });
-    reset({ correctAnswer: 0, tfAnswer: 0, questionText: "", optA: "", optB: "", optC: "", optD: "", answerKey: "" });
-    clearImage();
-    setSuccessMsg("Question added!");
-    setTimeout(() => setSuccessMsg(""), 2500);
+    if (isEditMode) {
+      await updateQuestion(editingQuestion.id, payload);
+      onUpdated({ ...editingQuestion, ...payload });
+      setSuccessMsg("Question updated!");
+      setTimeout(() => { setSuccessMsg(""); onCancelEdit?.(); }, 1500);
+    } else {
+      const id = await addQuestion(quizId, payload);
+      onAdded({ id, quizId, ...payload });
+      reset({ correctAnswer: 0, tfAnswer: 0, questionText: "", optA: "", optB: "", optC: "", optD: "", answerKey: "" });
+      clearImage();
+      setQuestionType("mc");
+      setSuccessMsg("Question added!");
+      setTimeout(() => setSuccessMsg(""), 2500);
+    }
   };
 
   return (
     <div style={styles.card}>
-      <h2 style={styles.title}>
-        <Plus size={16} strokeWidth={2.5} color="#6366f1" />
-        Add a Question
-      </h2>
+      <div style={styles.titleRow}>
+        <h2 style={styles.title}>
+          {isEditMode
+            ? <><Pencil size={16} strokeWidth={2.5} color="#6366f1" /> Edit Question</>
+            : <><Plus size={16} strokeWidth={2.5} color="#6366f1" /> Add a Question</>}
+        </h2>
+        {isEditMode && (
+          <button type="button" onClick={onCancelEdit} style={styles.cancelEditBtn}>
+            <X size={14} strokeWidth={2.5} /> Cancel
+          </button>
+        )}
+      </div>
 
       {/* Type dropdown */}
       <div style={{ position: "relative", marginBottom: "1.25rem" }}>
@@ -171,7 +227,7 @@ export default function QuestionForm({ quizId, onAdded }) {
           {errors.questionText && <span style={styles.error}>{errors.questionText.message}</span>}
         </div>
 
-        {/* Image upload — unchanged */}
+        {/* Image upload */}
         <div style={styles.field}>
           <label style={styles.label}>
             <ImageIcon size={12} strokeWidth={2} style={{ verticalAlign: "middle", marginRight: 4 }} />
@@ -285,9 +341,11 @@ export default function QuestionForm({ quizId, onAdded }) {
           </div>
         )}
 
-        <button type="submit" style={styles.submitBtn} disabled={isSubmitting || uploadingImage}>
+        <button type="submit" style={submitBtnStyle(isEditMode)} disabled={isSubmitting || uploadingImage}>
           {isSubmitting || uploadingImage ? (
             <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} />
+          ) : isEditMode ? (
+            <><Check size={15} strokeWidth={2.5} /> Save changes</>
           ) : (
             <><Plus size={15} strokeWidth={2.5} /> Add question</>
           )}
@@ -298,6 +356,20 @@ export default function QuestionForm({ quizId, onAdded }) {
 }
 
 // ─── Style helpers ─────────────────────────────────────────────────────────
+
+function submitBtnStyle(isEdit) {
+  return {
+    width: "100%", padding: "11px", fontSize: "14px", fontWeight: "600",
+    background: isEdit
+      ? "linear-gradient(135deg, #059669, #10b981)"
+      : "linear-gradient(135deg, #4f46e5, #6366f1)",
+    color: "#fff", border: "none", borderRadius: "10px", cursor: "pointer",
+    display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+    boxShadow: isEdit
+      ? "0 2px 8px rgba(5,150,105,0.25)"
+      : "0 2px 8px rgba(79,70,229,0.25)",
+  };
+}
 
 function textareaStyle(hasError) {
   return {
@@ -372,9 +444,19 @@ const styles = {
     position: "sticky", top: "76px",
     boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
   },
+  titleRow: {
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+    marginBottom: "1rem",
+  },
   title: {
     display: "flex", alignItems: "center", gap: "8px",
-    fontSize: "16px", fontWeight: "700", color: "#1e1b4b", margin: "0 0 1rem",
+    fontSize: "16px", fontWeight: "700", color: "#1e1b4b", margin: 0,
+  },
+  cancelEditBtn: {
+    display: "flex", alignItems: "center", gap: "4px",
+    fontSize: "12px", fontWeight: "600", color: "#6b7280",
+    background: "#f3f4f6", border: "1px solid #e5e7eb",
+    borderRadius: "8px", padding: "5px 10px", cursor: "pointer",
   },
   dropdownTrigger: {
     width: "100%", display: "flex", alignItems: "center", gap: "10px",
@@ -442,12 +524,5 @@ const styles = {
     background: "rgba(0,0,0,0.5)", color: "#fff",
     border: "none", cursor: "pointer",
     display: "flex", alignItems: "center", justifyContent: "center",
-  },
-  submitBtn: {
-    width: "100%", padding: "11px", fontSize: "14px", fontWeight: "600",
-    background: "linear-gradient(135deg, #4f46e5, #6366f1)",
-    color: "#fff", border: "none", borderRadius: "10px", cursor: "pointer",
-    display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-    boxShadow: "0 2px 8px rgba(79,70,229,0.25)",
   },
 };

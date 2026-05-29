@@ -83,6 +83,23 @@ export async function addQuestion(quizId, {
   return ref.id;
 }
 
+export async function updateQuestion(questionId, {
+  questionText, options, correctAnswer, type, imageURL = "", answerKey = "",
+}) {
+  const payload = { questionText, type, imageURL };
+
+  if (type === "mc" || type === "true_false") {
+    payload.options = options;
+    payload.correctAnswer = correctAnswer;
+  }
+
+  if (type === "identification") {
+    payload.answerKey = answerKey;
+  }
+
+  await updateDoc(doc(db, "questions", questionId), payload);
+}
+
 export async function getQuestions(quizId) {
   const q = query(collection(db, "questions"), where("quizId", "==", quizId));
   const snap = await getDocs(q);
@@ -145,19 +162,21 @@ export async function getQuizSubmissions(quizId) {
     const data = docSnap.data();
     let studentName = "Unknown Student";
     let studentEmail = "";
+    let studentPhoto = "";
     try {
       const userSnap = await getDoc(doc(db, "users", data.studentId));
       if (userSnap.exists()) {
         const u = userSnap.data();
         studentName = u.name || studentName;
         studentEmail = u.email || "";
+        studentPhoto = u.photoURL || "";
       }
     } catch { /* keep defaults */ }
 
     submissions.push({
       id: docSnap.id,
       studentId: data.studentId,
-      studentName, studentEmail,
+      studentName, studentEmail, studentPhoto,
       score: data.score,
       total: data.total,
       answers: data.answers || [],

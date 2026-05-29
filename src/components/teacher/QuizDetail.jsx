@@ -2,12 +2,11 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../firebase";
-import { getQuestions, setQuizPublished, deleteQuestion } from "../../utils/firestore";
+import { getQuestions, getQuizSubmissions, setQuizPublished, deleteQuestion } from "../../utils/firestore";
 import QuestionForm from "./QuestionForm";
-import StudentScoresPanel from "./StudentScoresPanel";
 import {
   ArrowLeft, Eye, EyeOff, Check, Loader2, FileText, HelpCircle,
-  Plus, Users, AlignLeft, Trash2, Copy,
+  Trash2, Copy, AlignLeft, Pencil, Lock, AlertTriangle,
 } from "lucide-react";
 
 const LETTERS = ["A", "B", "C", "D"];
@@ -24,28 +23,47 @@ export default function QuizDetail() {
   const [quiz, setQuiz] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("questions");
   const [codeCopied, setCodeCopied] = useState(false);
   const [deletingQId, setDeletingQId] = useState(null);
+  const [editingQuestion, setEditingQuestion] = useState(null);
+  const [hasSubmissions, setHasSubmissions] = useState(false);
 
   useEffect(() => {
     async function load() {
-      const [quizSnap, qs] = await Promise.all([
+      const [quizSnap, qs, subs] = await Promise.all([
         getDoc(doc(db, "quizzes", quizId)),
         getQuestions(quizId),
+        getQuizSubmissions(quizId),
       ]);
       if (quizSnap.exists()) setQuiz({ id: quizSnap.id, ...quizSnap.data() });
       setQuestions(qs);
+      setHasSubmissions(subs.length > 0);
       setLoading(false);
     }
     load();
   }, [quizId]);
 
+  // locked = published OR (unpublished but has submissions)
+  const isLocked = quiz?.isPublished || hasSubmissions;
+
+  const lockReason = quiz?.isPublished
+    ? "published"
+    : hasSubmissions
+    ? "submissions"
+    : null;
+
   const handleQuestionAdded = (newQuestion) => setQuestions((prev) => [...prev, newQuestion]);
+
+  const handleQuestionUpdated = (updated) => {
+    setQuestions((prev) => prev.map((q) => q.id === updated.id ? updated : q));
+    setEditingQuestion(null);
+  };
 
   const handleTogglePublish = async () => {
     await setQuizPublished(quizId, !quiz.isPublished);
     setQuiz((prev) => ({ ...prev, isPublished: !prev.isPublished }));
+    // clear editing state when toggling
+    setEditingQuestion(null);
   };
 
   const handleCopyCode = async () => {
@@ -56,10 +74,12 @@ export default function QuizDetail() {
   };
 
   const handleDeleteQuestion = async (qId) => {
+    if (isLocked) return;
     setDeletingQId(qId);
     try {
       await deleteQuestion(qId);
       setQuestions((prev) => prev.filter((q) => q.id !== qId));
+      if (editingQuestion?.id === qId) setEditingQuestion(null);
     } catch (err) {
       console.error("Delete question failed:", err);
     } finally {
@@ -111,6 +131,15 @@ export default function QuizDetail() {
         </button>
       </div>
 
+      {/* Lock warning banner */}
+      {lockReason && (
+        <div style={lockBannerStyle(lockReason)}>
+          {lockReason === "published"
+            ? <><Lock size={14} strokeWidth={2} /> Questions are locked while the quiz is published. <strong>Unpublish</strong> the quiz to make changes.</>
+            : <><AlertTriangle size={14} strokeWidth={2} /> Questions are locked because students have already submitted answers.</>}
+        </div>
+      )}
+
       <div style={styles.layout}>
         {/* Left — question list */}
         <div style={styles.left}>
@@ -129,8 +158,9 @@ export default function QuizDetail() {
             <div style={styles.questionList}>
               {questions.map((q, i) => {
                 const pill = TYPE_PILL[q.type];
+                const isEditing = editingQuestion?.id === q.id;
                 return (
-                  <div key={q.id} style={styles.questionCard}>
+                  <div key={q.id} style={questionCardStyle(isEditing, isLocked)}>
                     <div style={styles.qHeader}>
                       <span style={styles.qNum}>Q{i + 1}</span>
                       <p style={styles.qText}>{q.questionText}</p>
@@ -141,15 +171,37 @@ export default function QuizDetail() {
                             {pill.label}
                           </span>
                         )}
-                        <button
-                          onClick={() => handleDeleteQuestion(q.id)}
-                          disabled={deletingQId === q.id}
-                          style={styles.qDeleteBtn} title="Delete question"
-                        >
-                          {deletingQId === q.id
-                            ? <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} />
-                            : <Trash2 size={12} strokeWidth={2} />}
-                        </button>
+                        {/* Edit button — hidden when locked */}
+                        {!isLocked && (
+                          <button
+                            onClick={() => setEditingQuestion(isEditing ? null : q)}
+                            style={editBtnStyle(isEditing)}
+                            title={isEditing ? "Cancel edit" : "Edit question"}
+                          >
+                            {isEditing
+                              ? <Check size={12} strokeWidth={2.5} />
+                              : <Pencil size={12} strokeWidth={2} />}
+                          </button>
+                        )}
+                        {/* Delete button — hidden when locked */}
+                        {!isLocked && (
+                          <button
+                            onClick={() => handleDeleteQuestion(q.id)}
+                            disabled={deletingQId === q.id}
+                            style={styles.qDeleteBtn}
+                            title="Delete question"
+                          >
+                            {deletingQId === q.id
+                              ? <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} />
+                              : <Trash2 size={12} strokeWidth={2} />}
+                          </button>
+                        )}
+                        {/* Lock icon when locked */}
+                        {isLocked && (
+                          <span style={styles.qLockIcon} title="Locked">
+                            <Lock size={12} strokeWidth={2} />
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -218,34 +270,69 @@ export default function QuizDetail() {
           )}
         </div>
 
-        {/* Right — tabbed sidebar */}
+        {/* Right — QuestionForm or locked state */}
         <div style={styles.right}>
-          <div style={styles.tabBar}>
-            <button style={tabStyle(activeTab === "questions")} onClick={() => setActiveTab("questions")}>
-              <Plus size={14} strokeWidth={2.5} /> Add Question
-            </button>
-            <button style={tabStyle(activeTab === "scores")} onClick={() => setActiveTab("scores")}>
-              <Users size={14} strokeWidth={2.5} /> Submissions
-            </button>
-          </div>
-          {activeTab === "questions"
-            ? <QuestionForm quizId={quizId} onAdded={handleQuestionAdded} />
-            : <StudentScoresPanel quizId={quizId} />}
+          {isLocked ? (
+            <div style={styles.lockedFormCard}>
+              <div style={styles.lockedFormIcon}>
+                <Lock size={22} color="#9ca3af" strokeWidth={1.5} />
+              </div>
+              <p style={styles.lockedFormTitle}>Form locked</p>
+              <p style={styles.lockedFormSub}>
+                {lockReason === "published"
+                  ? "Unpublish the quiz to add or edit questions."
+                  : "Questions cannot be changed after students have submitted answers."}
+              </p>
+            </div>
+          ) : (
+            <QuestionForm
+              quizId={quizId}
+              onAdded={handleQuestionAdded}
+              onUpdated={handleQuestionUpdated}
+              editingQuestion={editingQuestion}
+              onCancelEdit={() => setEditingQuestion(null)}
+            />
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Style helpers ─────────────────────────────────────────────────────────
+// ─── Style helpers ──────────────────────────────────────────────────────────
 
-function tabStyle(active) {
+function lockBannerStyle(reason) {
+  const isPublished = reason === "published";
   return {
-    flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-    gap: "6px", padding: "10px 8px", fontSize: "13px", fontWeight: "600",
-    borderRadius: "10px", cursor: "pointer", border: "none",
-    background: active ? "#eef2ff" : "transparent",
-    color: active ? "#4f46e5" : "#9ca3af", transition: "all 0.15s",
+    display: "flex", alignItems: "center", gap: "10px",
+    padding: "12px 16px", borderRadius: "12px", marginBottom: "1.5rem",
+    fontSize: "13px", fontWeight: "500", lineHeight: 1.5,
+    background: isPublished ? "#fffbeb" : "#fef2f2",
+    border: `1px solid ${isPublished ? "#fde68a" : "#fecaca"}`,
+    color: isPublished ? "#92400e" : "#991b1b",
+  };
+}
+
+function questionCardStyle(isEditing, isLocked) {
+  return {
+    background: isLocked ? "#fafafa" : "#fff",
+    border: `1.5px solid ${isEditing ? "#a5b4fc" : isLocked ? "#f0f0f0" : "#e8eaef"}`,
+    borderRadius: "14px", padding: "1.25rem",
+    display: "flex", flexDirection: "column", gap: "12px",
+    boxShadow: isEditing ? "0 0 0 3px #eef2ff" : "0 1px 3px rgba(0,0,0,0.04)",
+    transition: "all 0.15s",
+    opacity: isLocked ? 0.85 : 1,
+  };
+}
+
+function editBtnStyle(isEditing) {
+  return {
+    width: "28px", height: "28px", borderRadius: "6px",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    background: isEditing ? "#eef2ff" : "none",
+    border: `1px solid ${isEditing ? "#a5b4fc" : "#e5e7eb"}`,
+    color: isEditing ? "#4f46e5" : "#6b7280",
+    cursor: "pointer", flexShrink: 0,
   };
 }
 
@@ -296,23 +383,22 @@ const styles = {
   page: { width: "100%", maxWidth: "1440px", margin: "0 auto", padding: "2rem 2.5rem" },
   center: { display: "flex", justifyContent: "center", padding: "4rem 0" },
   backBtn: { display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: "13px", fontWeight: "500", padding: "0 0 1.5rem" },
-  quizHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "2rem" },
+  quizHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem" },
   headerLeft: { display: "flex", gap: "14px", alignItems: "flex-start" },
   headerIcon: { width: "48px", height: "48px", borderRadius: "14px", background: "#eef2ff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   title: { fontSize: "22px", fontWeight: "700", color: "#1e1b4b", margin: 0, letterSpacing: "-0.02em" },
   codeBadge: { display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "12px", fontWeight: "700", letterSpacing: "0.06em", padding: "3px 10px", borderRadius: "6px", background: "#f5f3ff", color: "#6366f1", border: "1px solid #c7d2fe", cursor: "pointer", fontFamily: "monospace" },
   layout: { display: "grid", gridTemplateColumns: "1fr 420px", gap: "28px", alignItems: "flex-start" },
   left: {},
-  right: { display: "flex", flexDirection: "column", gap: "14px", position: "sticky", top: "76px" },
-  tabBar: { display: "flex", gap: "4px", background: "#f3f4f6", borderRadius: "12px", padding: "4px" },
+  right: { position: "sticky", top: "76px" },
   sectionTitle: { display: "flex", alignItems: "center", gap: "8px", fontSize: "16px", fontWeight: "700", color: "#1e1b4b", marginBottom: "14px" },
   count: { background: "#eef2ff", color: "#4f46e5", fontSize: "12px", fontWeight: "700", padding: "2px 10px", borderRadius: "20px" },
   questionList: { display: "flex", flexDirection: "column", gap: "14px" },
-  questionCard: { background: "#fff", border: "1px solid #e8eaef", borderRadius: "14px", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" },
   qHeader: { display: "flex", gap: "10px", alignItems: "flex-start", flexWrap: "wrap" },
   qNum: { background: "#eef2ff", color: "#4f46e5", fontSize: "12px", fontWeight: "700", padding: "3px 10px", borderRadius: "6px", flexShrink: 0 },
   qText: { fontSize: "15px", fontWeight: "500", color: "#1e1b4b", margin: 0, flex: 1 },
   qDeleteBtn: { width: "28px", height: "28px", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "1px solid #fecaca", color: "#dc2626", cursor: "pointer", flexShrink: 0 },
+  qLockIcon: { width: "28px", height: "28px", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center", color: "#d1d5db", flexShrink: 0 },
   qImageWrap: { borderRadius: "10px", overflow: "hidden", border: "1px solid #e5e7eb", maxWidth: "100%" },
   qImage: { width: "100%", maxHeight: "240px", objectFit: "contain", display: "block", background: "#fafafa" },
   options: { display: "flex", flexDirection: "column", gap: "6px" },
@@ -325,4 +411,8 @@ const styles = {
   emptyCard: { display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", background: "#fafafa", border: "2px dashed #e5e7eb", borderRadius: "14px", padding: "2.5rem", textAlign: "center" },
   emptyText: { fontSize: "14px", color: "#6b7280", margin: 0 },
   muted: { color: "#6b7280" },
+  lockedFormCard: { background: "#fafafa", border: "2px dashed #e5e7eb", borderRadius: "16px", padding: "2.5rem 1.5rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", textAlign: "center" },
+  lockedFormIcon: { width: "52px", height: "52px", borderRadius: "14px", background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "4px" },
+  lockedFormTitle: { fontSize: "15px", fontWeight: "700", color: "#6b7280", margin: 0 },
+  lockedFormSub: { fontSize: "13px", color: "#9ca3af", margin: 0, lineHeight: 1.5 },
 };
