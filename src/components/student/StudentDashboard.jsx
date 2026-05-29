@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { getPublishedQuizzes, getSubmission, getQuizByCode } from "../../utils/firestore";
+import { getSubmission, getQuizByCode } from "../../utils/firestore";
 import NavBar from "../shared/NavBar";
 import StudentQuiz from "./StudentQuiz";
 import Results from "./Results";
@@ -26,27 +26,30 @@ export default function StudentDashboard() {
 
 function QuizList() {
   const { user } = useAuth();
-  const [quizzes, setQuizzes] = useState([]);
   const [submissions, setSubmissions] = useState({});
-  const [loading, setLoading] = useState(true);
+  const [accessedQuizzes, setAccessedQuizzes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`quizzes_${user?.uid}`) || "[]"); }
+    catch { return []; }
+  });
   const navigate = useNavigate();
 
   // Join by code state
   const [joinCode, setJoinCode] = useState("");
   const [joinError, setJoinError] = useState("");
   const [joining, setJoining] = useState(false);
+  const [loadingSubs, setLoadingSubs] = useState(true);
 
+  // Load submissions for accessed quizzes
   useEffect(() => {
     async function load() {
-      const qs = await getPublishedQuizzes();
-      setQuizzes(qs);
+      if (!accessedQuizzes.length) { setLoadingSubs(false); return; }
       const subs = {};
-      await Promise.all(qs.map(async (q) => {
+      await Promise.all(accessedQuizzes.map(async (q) => {
         const sub = await getSubmission(user.uid, q.id);
         if (sub) subs[q.id] = sub;
       }));
       setSubmissions(subs);
-      setLoading(false);
+      setLoadingSubs(false);
     }
     load();
   }, [user.uid]);
@@ -73,9 +76,17 @@ function QuizList() {
         setJoining(false);
         return;
       }
+
+      // Add to accessed quizzes list if not already there
+      const entry = { id: quiz.id, title: quiz.title };
+      const updated = [entry, ...accessedQuizzes.filter((q) => q.id !== quiz.id)];
+      setAccessedQuizzes(updated);
+      localStorage.setItem(`quizzes_${user.uid}`, JSON.stringify(updated));
+
       // Check if already submitted
       const sub = await getSubmission(user.uid, quiz.id);
       if (sub) {
+        setSubmissions((prev) => ({ ...prev, [quiz.id]: sub }));
         navigate(`/student/results/${quiz.id}`);
       } else {
         navigate(`/student/quiz/${quiz.id}`);
@@ -97,7 +108,7 @@ function QuizList() {
       <div style={styles.header}>
         <div>
           <h1 style={styles.title}>Available Quizzes</h1>
-          <p style={styles.sub}>Take a quiz and see your score instantly</p>
+          <p style={styles.sub}>Enter a code from your teacher to access a quiz</p>
         </div>
       </div>
 
@@ -132,20 +143,20 @@ function QuizList() {
         </div>
       </div>
 
-      {loading ? (
+      {loadingSubs ? (
         <div style={styles.center}>
           <Loader2 size={28} color="#6366f1" style={{ animation: "spin 1s linear infinite" }} />
         </div>
-      ) : quizzes.length === 0 ? (
+      ) : accessedQuizzes.length === 0 ? (
         <motion.div style={styles.emptyCard} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
           <div style={styles.emptyIcon}><Inbox size={32} color="#a5b4fc" strokeWidth={1.5} /></div>
-          <p style={styles.emptyTitle}>No quizzes available yet</p>
-          <p style={styles.emptySub}>Check back when your teacher publishes a quiz, or join one using a code above</p>
+          <p style={styles.emptyTitle}>No quizzes yet</p>
+          <p style={styles.emptySub}>Enter a quiz code above to get started</p>
         </motion.div>
       ) : (
         <div style={styles.grid}>
           <AnimatePresence>
-            {quizzes.map((quiz, i) => {
+            {accessedQuizzes.map((quiz, i) => {
               const sub = submissions[quiz.id];
               const isPending = sub && (sub.gradedAnswers || []).some(
                 (g) => g.type === "situational" && g.correct === null
@@ -249,7 +260,6 @@ const styles = {
   sub: { fontSize: "14px", color: "#6b7280", marginTop: "4px" },
   center: { display: "flex", justifyContent: "center", padding: "4rem 0" },
 
-  // Join card
   joinCard: {
     display: "flex", alignItems: "center", justifyContent: "space-between",
     flexWrap: "wrap", gap: "14px",

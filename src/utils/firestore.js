@@ -14,13 +14,10 @@ import { db } from "../firebase";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-/** Generate a 6-char quiz code (no ambiguous chars: 0/O/1/I/L) */
 function generateQuizCode() {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
   let code = "";
-  for (let i = 0; i < 6; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
   return code;
 }
 
@@ -29,11 +26,7 @@ function generateQuizCode() {
 export async function createQuiz(teacherId, title) {
   const quizCode = generateQuizCode();
   const ref = await addDoc(collection(db, "quizzes"), {
-    title,
-    teacherId,
-    quizCode,
-    isPublished: false,
-    createdAt: serverTimestamp(),
+    title, teacherId, quizCode, isPublished: false, createdAt: serverTimestamp(),
   });
   return { id: ref.id, quizCode };
 }
@@ -55,10 +48,7 @@ export async function getPublishedQuizzes() {
 }
 
 export async function getQuizByCode(code) {
-  const q = query(
-    collection(db, "quizzes"),
-    where("quizCode", "==", code.toUpperCase().trim())
-  );
+  const q = query(collection(db, "quizzes"), where("quizCode", "==", code.toUpperCase().trim()));
   const snap = await getDocs(q);
   if (snap.empty) return null;
   const d = snap.docs[0];
@@ -66,30 +56,27 @@ export async function getQuizByCode(code) {
 }
 
 export async function deleteQuiz(quizId) {
-  // Delete all questions for this quiz
-  const qSnap = await getDocs(
-    query(collection(db, "questions"), where("quizId", "==", quizId))
-  );
+  const qSnap = await getDocs(query(collection(db, "questions"), where("quizId", "==", quizId)));
   for (const d of qSnap.docs) await deleteDoc(d.ref);
-
-  // Delete all submissions for this quiz
-  const sSnap = await getDocs(
-    query(collection(db, "submissions"), where("quizId", "==", quizId))
-  );
+  const sSnap = await getDocs(query(collection(db, "submissions"), where("quizId", "==", quizId)));
   for (const d of sSnap.docs) await deleteDoc(d.ref);
-
-  // Delete the quiz itself
   await deleteDoc(doc(db, "quizzes", quizId));
 }
 
 // ─── Questions ────────────────────────────────────────────────────────────
 
-export async function addQuestion(quizId, { questionText, options, correctAnswer, type = "mc", imageURL = "" }) {
+export async function addQuestion(quizId, {
+  questionText, options, correctAnswer, type = "mc", imageURL = "", answerKey = "",
+}) {
   const payload = { quizId, questionText, type, imageURL };
 
-  if (type === "mc") {
+  if (type === "mc" || type === "true_false") {
     payload.options = options;
     payload.correctAnswer = correctAnswer;
+  }
+
+  if (type === "identification") {
+    payload.answerKey = answerKey;
   }
 
   const ref = await addDoc(collection(db, "questions"), payload);
@@ -109,28 +96,32 @@ export async function deleteQuestion(questionId) {
 // ─── Submissions ──────────────────────────────────────────────────────────
 
 export async function submitQuiz(studentId, quizId, answers, questions) {
-  let mcScore = 0;
+  let autoScore = 0;
 
   const gradedAnswers = questions.map((q, i) => {
     if (q.type === "situational") {
       return { type: "situational", correct: null, note: "" };
     }
+    if (q.type === "identification") {
+      const studentAns = (answers[i] ?? "").toString().trim().toLowerCase();
+      const key = (q.answerKey ?? "").trim().toLowerCase();
+      const isCorrect = studentAns === key && studentAns.length > 0;
+      if (isCorrect) autoScore += 1;
+      return { type: "identification", correct: isCorrect };
+    }
+    // mc and true_false
     const isCorrect = answers[i] === q.correctAnswer;
-    if (isCorrect) mcScore += 1;
-    return { type: "mc", correct: isCorrect };
+    if (isCorrect) autoScore += 1;
+    return { type: q.type, correct: isCorrect };
   });
 
   const ref = await addDoc(collection(db, "submissions"), {
-    studentId,
-    quizId,
-    answers,
-    gradedAnswers,
-    score: mcScore,
-    total: questions.length,
+    studentId, quizId, answers, gradedAnswers,
+    score: autoScore, total: questions.length,
     submittedAt: serverTimestamp(),
   });
 
-  return { submissionId: ref.id, score: mcScore, total: questions.length };
+  return { submissionId: ref.id, score: autoScore, total: questions.length };
 }
 
 export async function getSubmission(studentId, quizId) {
@@ -148,12 +139,10 @@ export async function getSubmission(studentId, quizId) {
 export async function getQuizSubmissions(quizId) {
   const q = query(collection(db, "submissions"), where("quizId", "==", quizId));
   const snap = await getDocs(q);
-
   const submissions = [];
 
   for (const docSnap of snap.docs) {
     const data = docSnap.data();
-
     let studentName = "Unknown Student";
     let studentEmail = "";
     try {
@@ -163,15 +152,12 @@ export async function getQuizSubmissions(quizId) {
         studentName = u.name || studentName;
         studentEmail = u.email || "";
       }
-    } catch {
-      // keep defaults if user doc missing
-    }
+    } catch { /* keep defaults */ }
 
     submissions.push({
       id: docSnap.id,
       studentId: data.studentId,
-      studentName,
-      studentEmail,
+      studentName, studentEmail,
       score: data.score,
       total: data.total,
       answers: data.answers || [],
@@ -179,11 +165,10 @@ export async function getQuizSubmissions(quizId) {
       submittedAt: data.submittedAt?.toDate?.() ?? null,
     });
   }
-
   return submissions;
 }
 
-// ─── Grading ──────────────────────────────────────────────────────────────
+// ─── Grading (situational only — others are auto-graded) ──────────────────
 
 export async function gradeSubmission(submissionId, teacherGrades, questions) {
   const subRef = doc(db, "submissions", submissionId);
@@ -191,23 +176,13 @@ export async function gradeSubmission(submissionId, teacherGrades, questions) {
   if (!snap.exists()) return;
 
   const existing = snap.data();
-
   const updatedGradedAnswers = (existing.gradedAnswers || []).map((g, idx) => {
     if (questions[idx]?.type === "situational" && teacherGrades[idx] !== undefined) {
-      return {
-        ...g,
-        correct: teacherGrades[idx].correct,
-        note: teacherGrades[idx].note || "",
-      };
+      return { ...g, correct: teacherGrades[idx].correct, note: teacherGrades[idx].note || "" };
     }
     return g;
   });
 
   const newScore = updatedGradedAnswers.filter((g) => g.correct === true).length;
-
-  await updateDoc(subRef, {
-    gradedAnswers: updatedGradedAnswers,
-    score: newScore,
-    gradedAt: serverTimestamp(),
-  });
+  await updateDoc(subRef, { gradedAnswers: updatedGradedAnswers, score: newScore, gradedAt: serverTimestamp() });
 }
