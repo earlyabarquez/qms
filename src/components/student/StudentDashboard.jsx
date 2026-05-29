@@ -312,4 +312,4 @@ const styles = {
   emptyIcon: { width: "64px", height: "64px", borderRadius: "18px", background: "#eef2ff", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "4px" },
   emptyTitle: { fontSize: "18px", fontWeight: "600", color: "#1e1b4b", margin: 0 },
   emptySub: { fontSize: "14px", color: "#6b7280", margin: 0 },
-};
+};x
