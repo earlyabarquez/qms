@@ -7,6 +7,7 @@ import {
   Lock, Camera, LogOut, ChevronDown, Loader2, Check, X,
   Eye, EyeOff, AlertCircle, Image as ImageIcon,
 } from "lucide-react";
+import logo from "../../assets/quizbee_logo.png";
 
 export default function NavBar() {
   const { user, profile, refreshProfile } = useAuth();
@@ -16,7 +17,6 @@ export default function NavBar() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const dropdownRef = useRef(null);
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handleClick(e) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -41,7 +41,7 @@ export default function NavBar() {
       <nav style={styles.nav}>
         <div style={styles.inner}>
           <div style={styles.brand}>
-            <img src="/src/assets/quizbee_logo.png" alt="QuizBee" style={styles.logoImg} />
+            <img src={logo} alt="QuizBee" style={styles.logoImg} />
             <span style={styles.brandName}>Quiz<span style={styles.bee}>Bee</span></span>
             {profile?.role && (
               <span style={badgeStyle(profile.role)}>
@@ -50,7 +50,6 @@ export default function NavBar() {
             )}
           </div>
 
-          {/* Right — avatar dropdown */}
           <div style={styles.right} ref={dropdownRef}>
             <button
               style={styles.avatarBtn}
@@ -92,7 +91,6 @@ export default function NavBar() {
         </div>
       </nav>
 
-      {/* Sign-out confirmation modal */}
       {showConfirm && (
         <Modal onClose={() => setShowConfirm(false)}>
           <p style={styles.modalEmoji}>🐝</p>
@@ -105,15 +103,12 @@ export default function NavBar() {
         </Modal>
       )}
 
-      {/* Change password modal */}
       {showPasswordModal && (
         <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />
       )}
     </>
   );
 }
-
-// ─── Profile photo uploader (inside dropdown) ─────────────────────────────
 
 function ProfilePhotoUploader({ uid, currentPhoto, initials, onUploaded }) {
   const fileRef = useRef(null);
@@ -162,8 +157,6 @@ function ProfilePhotoUploader({ uid, currentPhoto, initials, onUploaded }) {
     </div>
   );
 }
-
-// ─── Change password modal ────────────────────────────────────────────────
 
 function ChangePasswordModal({ onClose }) {
   const [currentPw, setCurrentPw] = useState("");
@@ -215,7 +208,6 @@ function ChangePasswordModal({ onClose }) {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {/* Current */}
           <div style={pwInputWrap}>
             <Lock size={14} color="#9ca3af" />
             <input
@@ -230,7 +222,6 @@ function ChangePasswordModal({ onClose }) {
             </button>
           </div>
 
-          {/* New */}
           <div style={pwInputWrap}>
             <Lock size={14} color="#9ca3af" />
             <input
@@ -245,7 +236,6 @@ function ChangePasswordModal({ onClose }) {
             </button>
           </div>
 
-          {/* Confirm new */}
           <div style={pwInputWrap}>
             <Lock size={14} color="#9ca3af" />
             <input
@@ -280,8 +270,6 @@ function ChangePasswordModal({ onClose }) {
   );
 }
 
-// ─── Generic modal wrapper ────────────────────────────────────────────────
-
 function Modal({ children, onClose }) {
   return (
     <div style={styles.overlay} onClick={onClose}>
@@ -291,8 +279,6 @@ function Modal({ children, onClose }) {
     </div>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────
 
 const pwInputWrap = {
   display: "flex", alignItems: "center", gap: "8px",
@@ -341,8 +327,6 @@ const styles = {
     width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover",
   },
   name: { fontSize: "14px", color: "#374151", fontWeight: "500" },
-
-  // Dropdown
   dropdown: {
     position: "absolute", top: "calc(100% + 8px)", right: 0,
     background: "#fff", border: "1px solid #e5e7eb",
@@ -360,8 +344,6 @@ const styles = {
     color: "#374151", background: "none", border: "none",
     borderRadius: "8px", cursor: "pointer", textAlign: "left",
   },
-
-  // Photo section inside dropdown
   photoSection: {
     display: "flex", flexDirection: "column", alignItems: "center",
     gap: "6px", padding: "10px 8px",
@@ -387,8 +369,6 @@ const styles = {
     display: "flex", alignItems: "center", justifyContent: "center",
     cursor: "pointer",
   },
-
-  // Modal
   overlay: {
     position: "fixed", inset: 0, zIndex: 100,
     background: "rgba(0,0,0,0.35)", backdropFilter: "blur(4px)",

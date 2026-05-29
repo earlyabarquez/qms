@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { login } from "../utils/auth";
 import { Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import logo from "../assets/quizbee_logo.png";
 
 export default function LoginPage() {
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm();
@@ -27,7 +28,7 @@ export default function LoginPage() {
           {/* Big playful logo */}
           <div style={styles.logoBounce}>
             <img
-              src="/src/assets/quizbee_logo.png"
+              src={logo}
               alt="QuizBee logo"
               style={styles.logoImg}
             />
