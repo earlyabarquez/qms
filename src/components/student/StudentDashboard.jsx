@@ -27,17 +27,26 @@ export default function StudentDashboard() {
 function QuizList() {
   const { user } = useAuth();
   const [submissions, setSubmissions] = useState({});
-  const [accessedQuizzes, setAccessedQuizzes] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(`quizzes_${user?.uid}`) || "[]"); }
-    catch { return []; }
-  });
+  const [accessedQuizzes, setAccessedQuizzes] = useState([]); // no lazy init
   const navigate = useNavigate();
 
-  // Join by code state
   const [joinCode, setJoinCode] = useState("");
   const [joinError, setJoinError] = useState("");
   const [joining, setJoining] = useState(false);
   const [loadingSubs, setLoadingSubs] = useState(true);
+
+  // Re-load quizzes from localStorage whenever the logged-in user changes
+  useEffect(() => {
+    if (!user?.uid) return;
+    try {
+      const stored = JSON.parse(localStorage.getItem(`quizzes_${user.uid}`) || "[]");
+      setAccessedQuizzes(stored);
+    } catch {
+      setAccessedQuizzes([]);
+    }
+    setSubmissions({});
+    setLoadingSubs(true);
+  }, [user?.uid]);
 
   // Load submissions for accessed quizzes
   useEffect(() => {
@@ -52,7 +61,7 @@ function QuizList() {
       setLoadingSubs(false);
     }
     load();
-  }, [user.uid]);
+  }, [user.uid, accessedQuizzes]);
 
   const handleStart = (quizId) => navigate(`/student/quiz/${quizId}`);
   const handleReview = (quizId) => navigate(`/student/results/${quizId}`);

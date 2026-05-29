@@ -6,10 +6,10 @@ import {
   Mail, Lock, User, ArrowRight, Loader2,
   GraduationCap, BookOpen, Eye, EyeOff, ShieldCheck, KeyRound,
 } from "lucide-react";
+import logo from "../assets/quizbee_logo.png";
 
 const TEACHER_CODE = import.meta.env.VITE_TEACHER_CODE;
 
-// ─── Password strength rules ──────────────────────────────────────────────
 const PW_RULES = [
   { key: "len", label: "At least 8 characters", test: (v) => v.length >= 8 },
   { key: "upper", label: "One uppercase letter", test: (v) => /[A-Z]/.test(v) },
@@ -44,15 +44,12 @@ export default function RegisterPage() {
 
   const onSubmit = async ({ name, email, password, role, teacherCode }) => {
     setFirebaseError("");
-
-    // Teacher code verification
     if (role === "teacher") {
       if (!teacherCode || teacherCode.trim() !== TEACHER_CODE) {
         setFirebaseError("Invalid teacher verification code.");
         return;
       }
     }
-
     try {
       await registerUser(email, password, name, role);
       navigate("/");
@@ -63,11 +60,10 @@ export default function RegisterPage() {
 
   return (
     <div style={styles.page}>
-      {/* Left panel */}
       <div style={styles.left}>
         <div style={styles.leftContent}>
           <div style={styles.logoBounce}>
-            <img src="/src/assets/quizbee_logo.png" alt="QuizBee logo" style={styles.logoImg} />
+            <img src={logo} alt="QuizBee logo" style={styles.logoImg} />
           </div>
           <h2 style={styles.leftTitle}>
             Quiz<span style={styles.bee}>Bee</span>
@@ -87,15 +83,12 @@ export default function RegisterPage() {
         </div>
       </div>
 
-      {/* Right panel — register form */}
       <div style={styles.right}>
         <div style={styles.card}>
           <h1 style={styles.title}>Create your account</h1>
           <p style={styles.subtitle}>Join QuizBee as a teacher or student</p>
 
           <form onSubmit={handleSubmit(onSubmit)} style={styles.form} noValidate>
-
-            {/* Role selector */}
             <div style={styles.field}>
               <label style={styles.label}>I am a…</label>
               <div style={styles.roleRow}>
@@ -123,7 +116,6 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* Teacher code — only for teachers */}
             {selectedRole === "teacher" && (
               <div style={styles.field}>
                 <label style={styles.label}>
@@ -145,7 +137,6 @@ export default function RegisterPage() {
               </div>
             )}
 
-            {/* Full name */}
             <div style={styles.field}>
               <label style={styles.label}>Full name</label>
               <div style={inputWrapStyle(!!errors.name)}>
@@ -158,7 +149,6 @@ export default function RegisterPage() {
               {errors.name && <span style={styles.error}>{errors.name.message}</span>}
             </div>
 
-            {/* Email */}
             <div style={styles.field}>
               <label style={styles.label}>Email address</label>
               <div style={inputWrapStyle(!!errors.email)}>
@@ -174,7 +164,6 @@ export default function RegisterPage() {
               {errors.email && <span style={styles.error}>{errors.email.message}</span>}
             </div>
 
-            {/* Password */}
             <div style={styles.field}>
               <label style={styles.label}>Password</label>
               <div style={inputWrapStyle(!!errors.password)}>
@@ -198,7 +187,6 @@ export default function RegisterPage() {
               </div>
               {errors.password && <span style={styles.error}>{errors.password.message}</span>}
 
-              {/* Strength meter */}
               {passwordVal.length > 0 && (
                 <div style={styles.strengthWrap}>
                   <div style={styles.strengthBarBg}>
@@ -219,7 +207,6 @@ export default function RegisterPage() {
                 </div>
               )}
 
-              {/* Rule checklist */}
               {passwordVal.length > 0 && (
                 <div style={styles.ruleList}>
                   {PW_RULES.map((r) => {
@@ -234,7 +221,6 @@ export default function RegisterPage() {
               )}
             </div>
 
-            {/* Confirm password */}
             <div style={styles.field}>
               <label style={styles.label}>Confirm password</label>
               <div style={inputWrapStyle(!!errors.confirmPassword)}>
@@ -388,8 +374,7 @@ const styles = {
     flex: 1, display: "flex", gap: "4px",
   },
   ruleList: {
-    display: "flex", flexWrap: "wrap", gap: "4px 14px",
-    marginTop: "2px",
+    display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: "2px",
   },
   ruleItem: {
     fontSize: "11px", fontWeight: "500", whiteSpace: "nowrap",
